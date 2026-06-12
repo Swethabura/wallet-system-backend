@@ -1,182 +1,329 @@
-Wallet System Backend
+# Wallet System Backend
 
-A production-inspired wallet system built to explore transactional consistency, concurrency control, idempotency, distributed messaging, and event-driven architecture.
+A production-inspired digital wallet system built to explore transactional consistency, concurrency control, distributed messaging, and event-driven architecture using PostgreSQL and RabbitMQ.
 
-Features:
-Wallet Operations
-1. Create Wallet
-2. Credit Wallet
-3. Debit Wallet
-4. Transfer Funds
-5. Transaction History
-6. Balance Reconstruction
+The project focuses on solving real-world backend challenges such as concurrent balance updates, duplicate request handling, reliable event publishing, and transactional integrity.
 
-Reliability & Consistency
-1. PostgreSQL Transactions
-2. ACID Compliance
-3. Transaction Rollbacks
-4. Idempotency Protection
-5. Transactional Outbox Pattern
+---
 
-Concurrency Handling
-1. Row-Level Locking (FOR UPDATE)
-2. Concurrent Transfer Protection
-3. Deadlock Simulation
-4. Deadlock Resolution via Lock Ordering
-5. Retry Logic for Serialization Failures
+## Overview
 
-Event-Driven Architecture
-1. RabbitMQ Topic Exchange
-2. Event Publishing
-3. Audit Consumer
-4. Notification Consumer
-5. At-Least-Once Delivery
-6. Consumer Deduplication
+The system allows users to create wallets, perform balance operations, transfer funds between accounts, and maintain a complete transaction history while ensuring data consistency and reliability.
 
-Authentication & Security
-1. Access Token
-2. Refresh Token Rotation
-3. CSRF Protection
-4. Secure Cookie Authentication
-5. Role-Based Authorization
+The primary goal of this project is not only implementing wallet functionality but also understanding how production systems handle failures, concurrency, and distributed communication.
 
-Database Layer
-1. PostgreSQL
-2. Direct SQL using pg
-3. Repository Pattern
-4. Transaction Wrapper
+---
 
-Tech Stack:
+## Key Features
 
-Backend
-1. Node.js
-2. Express.js
+### Wallet Management
 
-Database
-1. PostgreSQL
-2. pg
+- Create Wallet
+- Credit Wallet
+- Debit Wallet
+- Transfer Funds
+- Transaction History
+- Double-Entry Transaction Recording
+- Balance Verification from Transaction Records
 
-Messaging
-1. RabbitMQ
+### Authentication & Authorization
 
-Authentication
-1. JWT
-2. Refresh Tokens
-3. CSRF Tokens
+* JWT Access Tokens
+* Refresh Token Rotation
+* CSRF Protection
+* Secure Cookie Authentication
+* Role-Based Access Control (RBAC)
 
-Validation
-1. Joi
+### Reliability & Consistency
 
-Logging
-1. Pino
-2. Pino Pretty
+* PostgreSQL Transactions
+* ACID Compliance
+* Automatic Rollbacks
+* Idempotent API Operations
+* Retryable Transactions
+* Transactional Outbox Pattern
 
-Architecture: 
+## Reliability Testing
 
-                    Client
-                       │
-                       ▼
-                    Routes
-                       │
-                       ▼
-                    Controllers
-                       │
-                       ▼
-                    Services
-                       │
-                       ▼
-                    Repositories
-                       │
-                       ▼
-                    PostgreSQL
+The project includes scenarios to simulate and validate:
 
-Event Flow
+- Concurrent Wallet Transfers
+- Race Conditions
+- Deadlocks
+- Serialization Failures
+- Duplicate Requests
+- Transaction Rollbacks
+- Event Publishing Reliability
 
-              Transfer Completed
-                      │
-                      ▼
-              RabbitMQ Exchange
-                      │
-                      ├── Audit Consumer
-                      │
-                      └── Notification Consumer
+### Concurrency Handling
 
-Concepts Explored:
+* Row-Level Locking (`FOR UPDATE`)
+* Concurrent Transfer Protection
+* Deadlock Simulation
+* Deadlock Detection & Resolution
+* Retry Logic for Serialization Failures
 
-1. ACID Transactions: Implemented transaction boundaries using PostgreSQL transactions to ensure atomic and consistent wallet operations.
+### Event-Driven Architecture
 
-2. Row-Level Locking
-    Used:
-    
-    SELECT ... FOR UPDATE
+* RabbitMQ Topic Exchange
+* Event Publishing
+* Audit Event Consumer
+* Notification Event Consumer
+* At-Least-Once Delivery
+* Consumer Deduplication
 
-to prevent race conditions during balance updates.
+---
 
-2. Deadlock Handling: Simulated deadlocks by acquiring locks in opposite order and resolved them using consistent lock ordering and retry logic.
+# Architecture
 
-3. Idempotency: Protected transfer endpoints against duplicate requests using idempotency keys.
+```text
+                Client
+                   │
+                   ▼
+                Routes
+                   │
+                   ▼
+              Controllers
+                   │
+                   ▼
+                Services
+                   │
+                   ▼
+             Repositories
+                   │
+                   ▼
+              PostgreSQL
+```
 
-4. Transactional Outbox: Implemented reliable event publishing to RabbitMQ without introducing dual-write inconsistencies.
+The application follows a layered architecture to separate responsibilities and improve maintainability.
 
-5. Consumer Deduplication: Handled at-least-once delivery safely by preventing duplicate event processing.
+* Routes handle request mapping.
+* Controllers process HTTP requests and responses.
+* Services contain business logic.
+* Repositories manage database access.
+* PostgreSQL acts as the source of truth.
 
-Project Structure: 
+---
 
-                        src/
-                        │
-                        ├── config/
-                        ├── db/
-                        ├── middlewares/
-                        ├── modules/
-                        │   ├── auth/
-                        │   ├── wallet/
-                        │   └── admin/
-                        │
-                        ├── consumers/
-                        ├── queues/
-                        ├── utils/
-                        │
-                        ├── app.js
-                        └── server.js
+# Event Flow
 
-API Highlights:
+```text
+          Transfer Completed
+                  │
+                  ▼
+         Transactional Outbox
+                  │
+                  ▼
+          RabbitMQ Exchange
+                  │
+        ┌─────────┴─────────┐
+        ▼                   ▼
+   Audit Consumer    Notification Consumer
+```
 
-1. Authentication
+Events are first written to an outbox table within the same database transaction as the wallet update.
+
+This ensures that business data and event creation remain consistent and avoids dual-write problems.
+
+A background publisher then forwards events to RabbitMQ for asynchronous processing.
+
+---
+
+### Architectural Patterns
+
+- Layered Architecture
+- Repository Pattern
+- Service Layer Pattern
+- Transaction Wrapper Pattern
+
+---
+
+# Reliability Guarantees
+
+### ACID Transactions
+
+All wallet operations execute within PostgreSQL transactions to ensure:
+
+* Atomicity
+* Consistency
+* Isolation
+* Durability
+
+Either the entire operation succeeds or all changes are rolled back.
+
+### Row-Level Locking
+
+To prevent race conditions during balance updates, wallet rows are locked using:
+
+```sql
+SELECT * FROM wallets
+WHERE id = $1
+FOR UPDATE;
+```
+
+This guarantees that only one transaction can modify a wallet balance at a time.
+
+### Deadlock Handling
+
+Deadlocks were intentionally simulated by acquiring wallet locks in opposite order across concurrent transactions.
+
+Resolution strategies included:
+
+- Consistent Lock Ordering
+- Retry Logic
+- Transaction Rollbacks
+- Serialization Failure Recovery
+
+### Idempotency
+
+Transfer endpoints support idempotency keys, preventing duplicate fund transfers caused by retries or network failures.
+
+### Transactional Outbox Pattern
+
+Instead of directly publishing messages after database updates, events are first stored in an outbox table within the same database transaction.
+
+This eliminates dual-write problems and guarantees reliable event delivery.
+
+### Consumer Deduplication
+
+RabbitMQ provides at-least-once delivery, meaning messages may occasionally be delivered more than once.
+
+Consumers maintain processed-event tracking to safely ignore duplicate events.
+
+### Transaction Isolation
+
+Explored PostgreSQL isolation levels while testing concurrent wallet operations and deadlock scenarios.
+
+Used transaction boundaries and retry mechanisms to safely handle serialization failures.
+
+---
+
+# Database Design
+
+### PostgreSQL
+
+Used as the primary datastore for:
+
+* Users
+* Wallets
+* Transactions
+* Outbox Events
+* Idempotency Records
+
+### Data Access Layer
+
+Implemented using:
+
+* pg
+* Repository Pattern
+* Transaction Wrapper
+
+This keeps database operations isolated from business logic.
+
+---
+
+# API Overview
+
+## Authentication
+
+```http
 POST /auth/register
 POST /auth/login
 POST /auth/refresh
 POST /auth/logout
 GET  /auth/profile
+```
 
-3. Wallet
+## Wallet
+
+```http
 POST /wallets/create
 POST /wallets/credit
 POST /wallets/debit
 POST /wallets/transfer
+GET  /wallets/history
+```
 
-4. Admin
+## Admin
+
+```http
 GET /admin/users
 GET /admin/wallets
 GET /admin/ledger
+```
 
-Reliability Features
+---
 
-1. Transaction Rollback Support
-2. Concurrent Transfer Safety
-3. Deadlock Recovery
-4. Retryable Transactions
-5. Idempotent APIs
-6. Reliable Event Publishing
-7. Consumer Deduplication
+# Tech Stack
 
-Running Locally: 
+## Backend
 
-Install Dependencies
+* Node.js
+* Express.js
+
+## Database
+
+* PostgreSQL
+* pg
+
+## Messaging
+
+* RabbitMQ
+
+## Authentication
+
+* JWT
+* Refresh Tokens
+* CSRF Tokens
+
+## Validation
+
+* Joi
+
+## Logging
+
+* Pino
+* Pino Pretty
+
+---
+
+# Project Structure
+
+```text
+src/
+│
+├── config/
+├── db/
+├── middlewares/
+│
+├── modules/
+│   ├── auth/
+│   ├── wallet/
+│   └── admin/
+│
+├── consumers/
+├── queues/
+├── utils/
+│
+├── app.js
+└── server.js
+```
+
+---
+
+# Running Locally
+
+## Install Dependencies
+
+```bash
 npm install
-Environment Variables
+```
 
-Create a .env file:
+## Environment Variables
 
+Create a `.env` file:
+
+```env
 PORT=5001
 
 DATABASE_URL=postgresql://username:password@localhost:5432/wallet_db
@@ -185,59 +332,82 @@ JWT_ACCESS_SECRET=your_access_secret
 JWT_REFRESH_SECRET=your_refresh_secret
 
 RABBITMQ_URL=amqp://localhost
+```
 
-Run PostgreSQL
+## Start PostgreSQL
 
 Ensure PostgreSQL is running and the database exists.
 
-Run RabbitMQ
-docker run -d --hostname rabbitmq \
+## Start RabbitMQ
+
+```bash
+docker run -d \
+--hostname rabbitmq \
 --name rabbitmq \
 -p 5672:5672 \
 -p 15672:15672 \
 rabbitmq:3-management
+```
 
-Management UI:
+RabbitMQ Management UI:
 
+```text
 http://localhost:15672
+```
 
-Start Server
+## Start Development Server
+
+```bash
 npm run dev
+```
 
-Learning Outcomes
+---
 
-This project was built to deeply understand:
+# Learning Outcomes
 
-1. ACID Transactions
-2. Isolation Levels
-3. Row Locking
-4. Deadlocks
-5. Retry Mechanisms
-6. Idempotency
-7. Event-Driven Systems
-8. RabbitMQ
-9. Transactional Outbox Pattern
-10. Distributed System Reliability
-11. Production-Oriented Backend Design
+This project was built to gain hands-on experience with:
 
-Status
+* ACID Transactions
+* Isolation Levels
+* Row-Level Locking
+* Concurrency Control
+* Deadlock Detection & Resolution
+* Idempotency
+* RabbitMQ Messaging
+* Event-Driven Architecture
+* Transactional Outbox Pattern
+* Distributed System Reliability
+* Production-Oriented Backend Design
 
-🚧 Currently under active development.
+---
 
-Implemented:
-1. Authentication System
-2. Wallet Operations
-3. Concurrency Controls
-4. RabbitMQ Integration
-5. Transactional Outbox Pattern
-6. Audit & Notification Consumers
+# Current Status
 
-Upcoming
-1. Frontend Dashboard
-2. Analytics
-3. Monitoring
-4. Metrics & Observability
-5. Deployment
-6. CI/CD
-7. Dockerization
+### Implemented
 
+Implemented
+
+✅ JWT Authentication
+✅ Wallet Operations
+✅ PostgreSQL Transactions
+✅ Row-Level Locking
+✅ Deadlock Simulation & Recovery
+✅ Idempotency Protection
+✅ Transactional Outbox Pattern
+✅ RabbitMQ Event Publishing
+✅ Audit Consumer
+✅ Notification Consumer
+✅ Concurrency Testing
+
+### Planned Enhancements
+
+* Frontend Dashboard
+* Metrics & Observability
+* Monitoring
+* Dockerization
+* CI/CD Pipeline
+* Production Deployment
+* Analytics Dashboard
+
+```
+```
